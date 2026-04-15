@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>醫護縮寫學習助手</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f1f5f9; touch-action: manipulation; }
+        .perspective { perspective: 1000px; }
+        .card-inner {
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+            cursor: pointer;
+            height: 220px;
+        }
+        .card-inner.is-flipped { transform: rotateY(180deg); }
+        .card-face {
+            backface-visibility: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            border-radius: 1.5rem;
+            position: absolute;
+            inset: 0;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card-front { background: white; color: #1e293b; }
+        .card-back { background: #eff6ff; color: #1d4ed8; transform: rotateY(180deg); }
+        .progress-fill { transition: width 0.4s ease; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center p-5">
+
+    <div class="w-full max-w-md mt-4">
+        <div class="flex justify-between items-end mb-2">
+            <h1 class="text-xl font-black text-slate-800 tracking-tight">醫護縮寫複習</h1>
+            <span id="stats" class="text-xs font-bold text-slate-400 bg-white px-3 py-1 rounded-full shadow-sm">0 / 187</span>
+        </div>
+        <div class="w-full bg-slate-200 rounded-full h-2">
+            <div id="progress-bar" class="progress-fill bg-blue-500 h-2 rounded-full" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <div class="w-full max-w-md mt-10 perspective">
+        <div id="card" class="card-inner relative">
+            <div class="card-face card-front">
+                <p id="question" class="text-lg font-medium text-center leading-relaxed">載入中...</p>
+                <div class="absolute bottom-6 text-slate-300 text-[10px] tracking-[0.2em] font-bold">點擊查看答案</div>
+            </div>
+            <div class="card-face card-back">
+                <p id="answer" class="text-2xl font-black text-center leading-tight"></p>
+                <div class="absolute bottom-6 text-blue-300 text-[10px] tracking-[0.2em] font-bold">正確答案</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="w-full max-w-md grid grid-cols-2 gap-4 mt-10">
+        <button id="btn-wrong" class="bg-white border-2 border-slate-100 py-5 rounded-2xl active:bg-red-50 active:border-red-200 transition-all group">
+            <span class="block text-red-500 text-2xl mb-1 group-active:scale-110 transition-transform">✕</span>
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">還不熟</span>
+        </button>
+        <button id="btn-correct" class="bg-white border-2 border-slate-100 py-5 rounded-2xl active:bg-green-50 active:border-green-200 transition-all group">
+            <span class="block text-green-500 text-2xl mb-1 group-active:scale-110 transition-transform">✓</span>
+            <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">已學會</span>
+        </button>
+    </div>
+
+    <div class="mt-auto mb-6 flex gap-8 items-center">
+        <button id="prev" class="text-slate-300 hover:text-blue-500 font-black text-xs">PREV</button>
+        <button id="restart" class="bg-slate-800 text-white px-6 py-2 rounded-full text-xs font-bold shadow-lg shadow-slate-200">重新開始</button>
+        <button id="next" class="text-slate-300 hover:text-blue-500 font-black text-xs">NEXT</button>
+    </div>
+
+    <script>
+        // 匯入 187 題資料 [cite: 1, 2, 3, 4, 5, 6, 7]
+        const data = [
+            ["醫學縮寫「AAD」的英文全文為何？", "against-advise discharge"],
+            ["護理紀錄中看到「AAD」，其代表的中文意義為何？", "自動出院"],
+            ["縮寫「ABG」是指檢測動脈血中的哪項指標？", "動脈血氧氣體 (arterial blood gas)"],
+            ["給藥時間縮寫「AC」是指 _____。", "飯前 (ante cibum)"],
+            ["縮寫「A.D.」是指哪一個解剖部位？", "右耳 (auris dexter)"],
+            ["評估病人的「ADL」是指評估其 _____。", "日常生活活動 (activities of daily living)"],
+            ["縮寫「Adm」在病歷中代表的動作為何？", "入院 (admission)"],
+            ["縮寫「AFB」是指耐酸性桿菌，臨床上常用於檢測 _____。", "結核桿菌 (acid-fast bacillus)"],
+            ["縮寫「A/G」代表哪兩種蛋白質的比率？", "白蛋白與球蛋白 (albumin/globulin)"],
+            ["時間縮寫「AM」是指 _____。", "上午 (ante meridian)"],
+            ["藥劑包裝縮寫「amp.」是指 _____。", "安瓿 (ampule)"],
+            ["X 光攝影方向「AP view」是指 _____ 方向。", "前後位攝影 (anteroposterior view)"],
+            ["縮寫「Aq」代表該物質具有何種性質？", "水溶性的 (aqueous, aqua, water)"],
+            ["縮寫「A.S.」是指哪一個解剖部位？", "左耳 (auris sinister)"],
+            ["縮寫「A.U.」是指哪一個解剖部位？", "雙耳 (auris unitas)"],
+            ["檢驗項目「B/C」是指 _____。", "血液培養 (blood culture)"],
+            ["給藥頻率「b.i.d」代表 _____。", "一天兩次 (twice a day)"],
+            ["縮寫「BMR」代表的中文意義為何？", "基礎代謝率 (basal metabolic rate)"],
+            ["縮寫「BP」是指 _____。", "血壓 (blood pressure)"],
+            ["醫院單位「BR」是指 _____。", "嬰兒室 (baby room)"],
+            ["縮寫「BSA」的全稱為 _____。", "body surface area (體表面積)"],
+            ["檢驗項目「BT」是指 _____ 時間。", "出血 (bleeding time)"],
+            ["縮寫「BUN」是指檢測血液中的哪種成分？", "血液尿素氮 (blood urea nitrogen)"],
+            ["常規檢驗「BUS」是指哪三種檢體的組合？", "血液、尿液、糞便 (blood, urine, stool)"],
+            ["體重紀錄通常縮寫為 _____。", "BW 或 Wt (body weight)"],
+            ["在護理術語中，代表「和」的符號為 _____。", "c (with)"],
+            ["藥劑縮寫「Cap」是指 _____。", "膠囊 (capsula)"],
+            ["檢驗項目「CBC」的全稱為 _____。", "complete blood count (全血球計數)"],
+            ["病歷中紀錄病人主要求診原因的縮寫為 _____。", "C.C. (chief complaint)"],
+            ["縮寫「Ccr」是指肌酸酐的 _____ 率。", "廓清 (creatinine clearance rate)"],
+            ["護理動作縮寫「CD」是指 _____。", "換藥 (change dressing)"],
+            ["醫院單位「CICU」代表 _____。", "心臟加護中心 (cardiology intensive care unit)"],
+            ["時間縮寫「C.M.」是指 _____。", "明晨 (coming morning)"],
+            ["評估病人的意識狀態時，常使用的縮寫為 _____。", "Con's (conscious)"],
+            ["護理技術「CPT」是指 _____ 治療。", "胸部物理治療 (chest physical therapy)"],
+            ["醫療職位「CR」代表 _____。", "住院總醫師 (chief resident)"],
+            ["影像檢查「C.T. scan」是指 _____。", "電腦斷層掃描 (computerized tomography scan)"],
+            ["縮寫「CXR」是指 _____ 檢查。", "胸部 X 光攝影 (chest X-ray)"],
+            ["醫囑縮寫「D.C.」代表 _____。", "停止 (discontinue)"],
+            ["藥物稀釋的縮寫為 _____。", "dil (dilute)"],
+            ["縮寫「DOA」是指病人送到醫院時的狀態為 _____。", "到達時已死亡 (dead on arrival)"],
+            ["縮寫「DW」是指哪種純水？", "蒸餾水 (distilled water)"],
+            ["檢驗項目「ECG」或「EKG」代表 _____。", "心電圖檢查 (electrocardiography)"],
+            ["醫院單位「ED」或「ER」是指 _____。", "急診部/急診室 (emergency department/room)"],
+            ["縮寫「EEG」是指 _____ 檢查。", "腦波檢查 (electroencephalography)"],
+            ["縮寫「EMG」是指 _____ 檢查。", "肌電圖檢查 (electromyography)"],
+            ["檢驗項目「FBS」是指 _____。", "空腹血糖 (fasting blood sugar)"],
+            ["縮寫「FFP」是指哪種血液製品？", "新鮮冷凍血漿 (fresh frozen plasma)"],
+            ["病歷中紀錄「FH」是指病人的 _____。", "家族病史 (family history)"],
+            ["護理動作「F/S」是指 _____ 檢測。", "指尖血糖 (finger sugar test)"],
+            ["評估量表「GCS」全稱為 _____。", "Glasgow coma scale (格拉斯哥昏迷指數)"],
+            ["給藥單位「gtt」是指 _____。", "滴 (gutta)"],
+            ["縮寫「GTT」是指 _____ 測驗。", "葡萄糖耐量 (glucose tolerance test)"],
+            ["縮寫「Hb」是指血液中的 _____。", "血紅素 (hemoglobin)"],
+            ["給藥時間「h.s.」是指 _____。", "睡前 (at bed time)"],
+            ["縮寫「Ht.」在血液檢查中代表 _____。", "血比容 (hematocrit)"],
+            ["縮寫「Hx」是指病人的 _____。", "病史 (history)"],
+            ["注射方式縮寫「IM」代表 _____。", "肌肉注射法 (intramuscular injection)"],
+            ["注射方式縮寫「IV」代表 _____。", "靜脈內的 (intravenous)"],
+            ["護理紀錄中的「I & O」代表 _____。", "輸入與排出 (intake and output)"],
+            ["縮寫「MBD」代表病人 _____。", "許可出院 (may be discharge)"],
+            ["縮寫「NPO」是指 _____。", "禁食 (nothing by mouth)"],
+            ["縮寫「N/S」是指哪種常備輸液？", "生理食鹽水 (normal saline)"],
+            ["糞便檢查「OB」是指檢測有無 _____。", "潛血 (occult blood)"],
+            ["縮寫「O.D.」是指哪一個部位？", "右眼 (oculus dexter)"],
+            ["縮寫「O.S.」是指哪一個部位？", "左眼 (oculus sinister)"],
+            ["縮寫「O.U.」是指哪一個部位？", "雙眼 (oculus unitas)"],
+            ["給藥時間縮寫「p.c.」是指 _____。", "飯後 (post cibum)"],
+            ["身體檢查或理學檢查通常縮寫為 _____。", "PE (physical examination)"],
+            ["縮寫「PI」是指病人的 _____。", "現在病況 (present illness)"],
+            ["時間縮寫「PM」是指 _____。", "下午 (post meridiem)"],
+            ["給藥方式「PO」是指 _____。", "口服 (per os)"],
+            ["縮寫「prn」代表藥物的使用時機為 _____。", "需要時給予 (as required)"],
+            ["復健運動「PROM」是指 _____。", "被動關節運動 (passive range of motion)"],
+            ["給藥頻率「qd」代表 _____。", "每天 (every day)"],
+            ["給藥頻率「qid」代表 _____。", "一天四次 (quarter in diem)"],
+            ["醫學術語「R/O」代表的意義為何？", "疑似、可能是 (rule out)"],
+            ["復健運動「ROM」是指 _____。", "全關節運動 (range of motion)"],
+            ["縮寫「SC」代表的注射方式為何？", "皮下注射法 (subcutaneous injection)"],
+            ["縮寫「SL」代表的給藥途徑為何？", "舌下的 (sublingual)"],
+            ["縮寫「st.」或「stat.」代表該處置必須 _____。", "立即 (immediately)"],
+            ["給藥頻率「tid」代表 _____。", "一天三次 (three times a day)"],
+            ["縮寫「TPN」是指哪種營養供應方式？", "全腸道外營養法 (total parenteral nutrition)"],
+            ["生命徵象「TPR」依序代表哪三項指標？", "體溫、脈搏、呼吸 (temperature, pulse, respiration)"],
+            ["檢驗項目「U/A」代表 _____。", "尿液分析 (urinalysis)"],
+            ["檢驗項目「WBC」代表的血球種類為何？", "白血球 (white blood cell)"],
+            ["骨科術語「abd」是指肢體執行 _____ 動作。", "外展 (abduction)"],
+            ["骨科術語「add」是指肢體執行 _____ 動作。", "內收 (adduction)"],
+            ["縮寫「AMI」代表哪一種危急的心臟疾病？", "急性心肌梗塞 (acute myocardial infarction)"],
+            ["縮寫「Af」是指哪種心律不整？", "心房纖維顫動 (atrial fibrillation)"],
+            ["縮寫「ARF」在腎臟科代表 _____。", "急性腎衰竭 (acute renal failure)"],
+            ["縮寫「BPH」常用於描述高齡男性的何種症狀？", "良性前列腺肥大 (benign prostatic hyperplasia)"],
+            ["縮寫「CABG」是指哪一種心臟手術？", "冠狀動脈繞道移植術 (coronary artery bypass graft)"],
+            ["縮寫「CAD」是指哪一種心臟病？", "冠狀動脈疾病 (coronary artery disease)"],
+            ["縮寫「CHF」全稱為 _____。", "congestive heart failure (充血性心臟衰竭)"],
+            ["檢驗項目「PT」代表的是 _____ 時間。", "凝血酶原時間 (prothrombin time)"],
+            ["檢驗項目「PTT」代表的是 _____ 時間。", "部分凝血活酶時間 (partial thromboplastin time)"],
+            ["手術縮寫「pre-op」是指手術 _____。", "前 (pre-operative)"],
+            ["手術縮寫「post-op」是指手術 _____。", "後 (post-operative)"],
+            ["縮寫「NKA」在過敏紀錄中代表 _____。", "無已知過敏原 (non-known agent)"],
+            ["縮寫「Oph」代表 _____ 專科。", "眼科 (ophthalmology)"],
+            ["縮寫「Ped」代表 _____ 專科。", "兒科 (pediatrics)"],
+            ["縮寫「GI」代表 _____ 專科。", "腸胃內科 (gastrointestinal medicine)"],
+            ["縮寫「GS」代表 _____ 專科。", "一般外科 (general surgery)"],
+            ["縮寫「ENT」代表 _____ 專科。", "耳鼻喉科 (ear, nose, and throat)"],
+            ["縮寫「RN」在醫療團隊中代表 _____。", "護理師 (registered nurse)"],
+            ["縮寫「VS」在醫療團隊中代表 _____。", "主治醫師 (visiting staff)"],
+            ["縮寫「V/S」代表病人的 _____。", "生命徵象 (vital signs)"],
+            ["醫囑縮寫「SOS」代表藥物的使用規則為 _____。", "如有需要給予一次 (one dose if necessary)"],
+            ["縮寫「qod」是指頻率為 _____。", "每隔一天 (every other day)"],
+            ["縮寫「qh」是指頻率為 _____。", "每小時 (every hour)"],
+            ["縮寫「qm」是指頻率為 _____。", "每天早晨 (every morning)"],
+            ["縮寫「qn」是指頻率為 _____。", "每天晚上 (every night)"],
+            ["縮寫「PRBC」是指哪種血液成分？", "紅血球濃厚液 (packed red blood cell)"],
+            ["檢驗項目「PC」代表的是 _____ 計數。", "血小板 (platelet count)"],
+            ["縮寫「PST」是指對哪類藥物進行的皮試？", "盤尼西林 (penicillin skin test)"],
+            ["縮寫「U/C」代表檢驗中的 _____。", "尿液培養 (urine culture)"],
+            ["縮寫「RBC」代表的是 _____。", "紅血球 (red blood cell)"],
+            ["縮寫「ESR」是指紅血球的 _____ 速率。", "沉降 (erythrocyte sedimentation rate)"],
+            ["縮寫「ASD」是指心臟的哪種先天性缺陷？", "心房中隔缺損 (atrial septal defect)"],
+            ["縮寫「BOM」是指哪種耳部疾病？", "雙側中耳炎 (bilateral otitis media)"],
+            ["縮寫「CAPD」是指哪一種透析方式？", "連續性可活動式腹膜透析 (continuous ambulatory peritoneal dialysis)"],
+            ["縮寫「CBD stone」是指 _____ 結石。", "總膽管 (common bile duct stone)"],
+            ["縮寫「AK」常用於截肢部位描述，是指 _____。", "膝上 (above knee)"],
+            ["縮寫「BK」常用於截肢部位描述，是指 _____。", "膝下 (below knee)"],
+            ["縮寫「AE」常用於截肢部位描述，是指 _____。", "肘上 (above elbow)"],
+            ["縮寫「BE」常用於截肢部位描述，是指 _____。", "肘下 (below elbow)"],
+            ["縮寫「AGN」是指腎臟的 _____ 炎。", "急性腎絲球腎炎 (acute glomerulonephritis)"],
+            ["縮寫「ALS」代表的疾病全稱為 _____。", "amyotrophic lateral sclerosis (肌萎縮性脊髓側索硬化症)"],
+            ["藥物縮寫「gtt」的拉丁文全稱為 _____。", "gutta"],
+            ["給藥頻率「quarter in diem」的縮寫為 _____。", "qid"],
+            ["縮寫「i.c.」是指給藥或處置的時間在 _____。", "兩餐間 (inter cibus)"],
+            ["給藥方式「p.r.」是指 _____。", "經由直腸 (per rectum)"],
+            ["縮寫「liq」代表物質的形式為 _____。", "液體 (liquid)"],
+            ["縮寫「oint」代表藥劑的形式為 _____。", "藥膏 (ointment)"],
+            ["縮寫「pulv」代表藥劑的形式為 _____。", "粉劑 (powder)"],
+            ["縮寫「susp」代表藥劑的形式為 _____。", "懸浮液 (suspension)"],
+            ["縮寫「syr」代表藥劑的形式為 _____。", "糖漿 (syrup)"],
+            ["縮寫「tab」代表藥劑的形式為 _____。", "錠劑或片劑 (tablet)"],
+            ["醫院單位「OR」全稱為 _____。", "operative room (手術室)"],
+            ["檢驗項目「OGTT」全稱為 _____。", "oral glucose tolerance test (口服葡萄糖耐量試驗)"],
+            ["縮寫「NKA」全稱為 _____。", "non-known agent"],
+            ["紀錄病人過往病史的縮寫為 _____。", "PMH 或 PH (past medical history / personal history)"],
+            ["縮寫「POMR」是指哪種紀錄方式？", "以問題為導向紀錄法 (problem-oriented medical recording)"],
+            ["縮寫「Surg」是指醫院的哪一個專科？", "外科 (surgery)"],
+            ["縮寫「OT」是指醫療團隊中的 _____。", "職能治療師 (occupational therapist)"],
+            ["縮寫「PT」在復健醫療中是指 _____。", "物理治療師 (physical therapist)"],
+            ["縮寫「ST」是指醫療團隊中的 _____。", "語言治療師 (speech therapist)"],
+            ["縮寫「RT」是指醫療團隊中的 _____。", "呼吸治療師 (respiratory therapist)"],
+            ["縮寫「NP」的全稱為 _____。", "nurse practitioner (專科護理師)"],
+            ["縮寫「HN」代表的職位為 _____。", "護理長 (head nurse)"],
+            ["縮寫「SN」代表的身分為 _____。", "護生 (student nurse)"],
+            ["縮寫「SPN」代表的身分為 _____。", "特別護理師 (special nurse)"],
+            ["檢驗項目「Sp.gr」代表的是 _____。", "尿液比重 (urine specific gravity)"],
+            ["縮寫「ALL」代表哪種癌症？", "急性淋巴球性白血病 (acute lymphocytic leukemia)"],
+            ["縮寫「AML」代表哪種癌症？", "急性單核球性/骨髓性白血病 (acute monocytic/myelocytic leukemia)"],
+            ["縮寫「AGN」的全稱為 _____。", "acute glomerulonephritis"],
+            ["縮寫「AMI」中的「I」代表 _____。", "infarction (梗塞)"],
+            ["縮寫「AOM」是指 _____ 炎。", "急性中耳炎 (acute otitis media)"],
+            ["縮寫「APR」是指哪種手術方式？", "腹會陰切除術 (abdominal perineal resection)"],
+            ["縮寫「AS」在瓣膜病變中代表 _____。", "主動脈瓣狹窄 (aortic stenosis)"],
+            ["縮寫「AS」在一般血管病變中代表 _____。", "動脈硬化 (arteriosclerosis)"],
+            ["縮寫「AST」是指眼科的哪種屈光不正？", "散光 (astigmatism)"],
+            ["縮寫「AVF」的全稱為 _____。", "arterio-venous fistula (動靜脈廔管)"],
+            ["縮寫「BBB」在心電圖中代表 _____。", "束枝傳導阻滯 (bundle branch block)"],
+            ["縮寫「BPH」中的「P」代表 _____。", "prostatic (前列腺的)"],
+            ["縮寫「Ca」在病歷中代表 _____。", "癌症 (cancer)"],
+            ["縮寫「CAD」中的「A」代表 _____。", "artery (動脈)"],
+            ["縮寫「CAPD」中的「A」代表 _____。", "ambulatory (可活動的)"],
+            ["縮寫「CC」代表 _____ 檢查。", "心導管檢查 (cardiac catheterization)"],
+            ["縮寫「CHF」中的「H」代表 _____。", "heart (心臟)"],
+            ["縮寫「qd」全稱為 every day，縮寫「qod」則代表 _____。", "每隔一天 (every other day)"],
+            ["縮寫「tid」是指一天給予 _____ 次。", "三 (three)"],
+            ["給藥頻率「quarter in diem」的簡寫為 _____。", "qid"],
+            ["縮寫「SOS」中的「O」代表 _____。", "one (一)"],
+            ["縮寫「BSA」中的「S」代表 _____。", "surface (表面)"],
+            ["縮寫「CBC」中的「B」代表 _____。", "blood (血液)"],
+            ["縮寫「Ccr」中的「C」代表 _____。", "clearance (廓清)"],
+            ["縮寫「CXR」中的「X」代表 _____。", "X-ray (X 光)"],
+            ["縮寫「FBS」中的「F」代表 _____。", "fasting (空腹)"],
+            ["縮寫「FFP」中的「F」代表 _____。", "fresh frozen (新鮮冷凍)"],
+            ["縮寫「GCS」中的「C」代表 _____。", "coma (昏迷)"],
+            ["縮寫「ICU」中的「I」代表 _____。", "intensive (加護的)"],
+            ["縮寫「NPO」中的「O」代表 _____。", "os (口)"],
+            ["縮寫「ROM」中的「M」代表 _____。", "motion (運動)"],
+            ["縮寫「TPN」中的「N」代表 _____。", "nutrition (營養)"],
+            ["縮寫「V/S」中的「V」代表 _____。", "vital (生命的)"]
+        ];
+
+        let index = 0;
+
+        function update() {
+            const card = document.getElementById('card');
+            card.classList.remove('is-flipped');
+            
+            setTimeout(() => {
+                document.getElementById('question').textContent = data[index][0];
+                document.getElementById('answer').textContent = data[index][1];
+                document.getElementById('stats').textContent = `${index + 1} / ${data.length}`;
+                document.getElementById('progress-bar').style.width = `${((index + 1) / data.length) * 100}%`;
+            }, 150);
+        }
+
+        document.getElementById('card').onclick = () => {
+            document.getElementById('card').classList.toggle('is-flipped');
+        };
+
+        document.getElementById('btn-correct').onclick = () => {
+            if (index < data.length - 1) {
+                index++;
+                update();
+            } else {
+                alert("恭喜！你已經完成所有題目的練習！");
+            }
+        };
+
+        document.getElementById('btn-wrong').onclick = () => {
+            if (index < data.length - 1) {
+                index++;
+                update();
+            }
+        };
+
+        document.getElementById('next').onclick = () => {
+            if (index < data.length - 1) {
+                index++;
+                update();
+            }
+        };
+
+        document.getElementById('prev').onclick = () => {
+            if (index > 0) {
+                index--;
+                update();
+            }
+        };
+
+        document.getElementById('restart').onclick = () => {
+            index = 0;
+            update();
+        };
+
+        update();
+    </script>
+</body>
+</html>
